@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Peace Marketplace</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --blue:#1E3A8A;
+  --gold:#D4AF37;
+  --white:#fff;
+}
+body{margin:0;font-family:sans-serif;background:#f5f7fb;transition:all 0.3s ease;}
+.navbar{background:linear-gradient(135deg,var(--blue),#0F172A);color:#fff;padding:15px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:1000;transition:all 0.3s ease;}
+.logo{font-weight:800;font-size:1.2em;}
+.navBtn{background:white;color:var(--blue);border:none;padding:6px 10px;border-radius:5px;cursor:pointer;font-weight:bold;transition:all 0.2s ease;}
+.navBtn:hover{transform:scale(1.05);}
+.container{padding:15px;transition:all 0.5s ease;opacity:1;}
+.container.hidden{opacity:0;display:none;}
+.card{background:#fff;padding:15px;border-radius:15px;margin-bottom:15px;box-shadow:0 5px 15px rgba(0,0,0,0.08);}
+input,textarea{width:100%;padding:12px;margin:10px 0;border-radius:10px;border:1px solid #ddd;box-sizing:border-box}
+button{padding:10px;border:none;border-radius:10px;cursor:pointer;transition:all 0.2s ease;}
+button:hover{transform:scale(1.05);}
+.primary{background:var(--blue);color:white;font-weight:bold;}
+.gold{background:var(--gold);color:black;font-weight:bold;}
+.product{background:#fff;padding:15px;border-radius:15px;margin-bottom:15px;box-shadow:0 3px 10px rgba(0,0,0,0.1);transition:all 0.3s ease;}
+.product:hover{transform:scale(1.02);}
+.product img{width:100%;border-radius:10px;margin:5px 0;transition:all 0.3s ease;}
+.carousel{display:flex;overflow-x:auto;gap:10px;scroll-behavior:smooth;}
+.carousel::-webkit-scrollbar{display:none;}
+.cart-btn{position:fixed;bottom:20px;left:20px;background:var(--gold);padding:15px;border-radius:50%;font-size:1.2em;cursor:pointer;box-shadow:0 2px 5px rgba(0,0,0,0.2);transition:transform 0.2s ease;}
+.cart-btn:active{transform:scale(1.2);}
+.cart{position:fixed;bottom:80px;left:20px;background:#fff;padding:15px;border-radius:15px;width:300px;display:none;box-shadow:0 5px 15px rgba(0,0,0,0.2);max-height:400px;overflow-y:auto;transition:all 0.3s ease;}
+.cart-item{display:flex;justify-content:space-between;margin-bottom:8px;}
+.removeBtn{background:red;color:white;border:none;border-radius:5px;padding:2px 5px;cursor:pointer;font-size:0.8em;transition:all 0.2s ease;}
+.removeBtn:hover{transform:scale(1.1);}
+.categories{display:flex;gap:10px;margin-bottom:15px;overflow-x:auto;scroll-behavior:smooth;transition:all 0.2s ease;}
+.categories button{flex:none;padding:8px 12px;border-radius:10px;border:none;background:#ddd;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;}
+.categories button.active{background:var(--blue);color:white;transform:scale(1.05);}
+.fly-img{position:absolute;width:40px;height:40px;border-radius:50%;pointer-events:none;z-index:1000;transition:all 0.5s ease;}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <button class="navBtn" onclick="enterSeller()">Sell</button>
+  <div class="logo">🌍 Peace Marketplace</div>
+  <button class="navBtn" onclick="enterBuyer()">Buy</button>
+</div>
+
+<!-- BUYER HOME -->
+<div class="container" id="homePage">
+  <div class="categories" id="categoryButtons"></div>
+  <div id="products"></div>
+</div>
+
+<!-- SELLER PAGE -->
+<div class="container hidden" id="sellerPage">
+  <div class="card">
+    <h3>Add Product</h3>
+    <input id="brand" placeholder="Brand Name">
+    <input id="name" placeholder="Product Name">
+    <input id="price" type="number" placeholder="Price">
+    <input id="category" placeholder="Category">
+    <textarea id="desc" placeholder="Description"></textarea>
+    <input type="file" id="images" multiple accept="image/*">
+    <button class="primary" onclick="addProduct()">Upload</button>
+  </div>
+</div>
+
+<!-- CART BUTTON -->
+<button class="cart-btn" id="cartBtn" onclick="toggleCart()">🛒</button>
+<div class="cart" id="cartBox">
+  <h3>Cart</h3>
+  <div id="cartItems"></div>
+  <h4>Buyer Info</h4>
+  <input id="buyerName" placeholder="Your Name">
+  <input id="buyerWhatsApp" placeholder="WhatsApp Number">
+  <input id="buyerAddress" placeholder="Address">
+  <input id="transactionID" placeholder="Transaction ID">
+  <h4>Your Payment Details</h4>
+  <p>Account: 7030455256 Salaam Muhammad Boluwatife Opay</p>
+  <p>Total: ₦<span id="totalAmount">0</span></p>
+  <button class="primary" onclick="checkout()">Checkout</button>
+</div>
+
+<script>
+// FIREBASE CONFIG
+const firebaseConfig = {
+  apiKey: "YOUR_KEY",
+  authDomain: "YOUR_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let cart = [];
+let productsData = [];
+let currentCategory = "All";
+
+// PAGE CONTROL
+function show(page){
+  ["homePage","sellerPage"].forEach(p=>{
+    document.getElementById(p).classList.add("hidden");
+  });
+  const el = document.getElementById(page);
+  el.classList.remove("hidden");
+  el.style.opacity = 0;
+  setTimeout(()=>el.style.opacity=1,50); // fade-in effect
+}
+
+function enterBuyer(){
+  show("homePage");
+  document.getElementById("cartBtn").style.display="block";
+  loadProducts();
+}
+
+function enterSeller(){
+  show("sellerPage");
+  document.getElementById("cartBtn").style.display="none";
+}
+
+// HELPER TO CONVERT FILE TO BASE64
+function fileToBase64(file){
+  return new Promise((resolve)=>{
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+// ADD PRODUCT
+async function addProduct(){
+  let brand=document.getElementById("brand").value;
+  let name=document.getElementById("name").value;
+  let price=document.getElementById("price").value;
+  let desc=document.getElementById("desc").value;
+  let category=document.getElementById("category").value;
+  let imagesInput=document.getElementById("images");
+
+  if(!brand || !name || !price){
+    alert("Brand, Name, and Price are required!");
+    return;
+  }
+
+  let images = [];
+  for(let i=0;i<imagesInput.files.length;i++){
+    images.push(await fileToBase64(imagesInput.files[i]));
+  }
+
+  await db.collection("products").add({brand,name,price,desc,category,images});
+
+  alert("Uploaded ✅ Redirecting to Home...");
+  
+  enterBuyer();  // redirect seller to buyer view automatically
+}
+
+// LOAD PRODUCTS
+async function loadProducts(){
+  const snap = await db.collection("products").get();
+  productsData = snap.docs.map(doc => ({id:doc.id,...doc.data()}));
+  renderCategories();
+  renderProducts();
+  startAutoCarousel();
+}
+
+// RENDER CATEGORIES
+function renderCategories(){
+  const categories = ["All",...new Set(productsData.map(p=>p.category || "Other"))];
+  let html = "";
+  categories.forEach(cat=>{
+    html += `<button class="${cat===currentCategory?'active':''}" onclick="filterCategory('${cat}')">${cat}</button>`;
+  });
+  document.getElementById("categoryButtons").innerHTML = html;
+}
+
+function filterCategory(cat){
+  currentCategory = cat;
+  renderCategories();
+  renderProducts();
+}
+
+// RENDER PRODUCTS
+function renderProducts(){
+  let html="";
+  let filtered = productsData.filter(p=>currentCategory==="All"||p.category===currentCategory);
+  filtered.forEach(p=>{
+    let imagesHTML = `<div class="carousel" id="carousel-${p.id}">${p.images.map(img=>`<img src="${img}" width="150">`).join('')}</div>`;
+    html += `
+      <div class="product">
+        <h4>${p.brand} - ${p.name}</h4>
+        ${imagesHTML}
+        <p>${p.desc}</p>
+        <strong>₦${p.price}</strong><br><br>
+        <button class="gold" onclick="addToCartAnimation('${p.brand} - ${p.name}',${p.price},this)">Add to cart</button>
+      </div>
+    `;
+  });
+  document.getElementById("products").innerHTML = html;
+}
+
+// AUTO-SCROLL CAROUSEL
+function startAutoCarousel(){
+  productsData.forEach(p=>{
+    const carousel = document.getElementById(`carousel-${p.id}`);
+    if(carousel){
+      let scrollPos=0;
+      setInterval(()=>{
+        if(scrollPos >= carousel.scrollWidth - carousel.clientWidth){
+          scrollPos=0;
+        } else scrollPos += 160;
+        carousel.scrollTo({left:scrollPos,behavior:'smooth'});
+      },3000);
+    }
+  });
+}
+
+// CART FUNCTIONS
+function toggleCart(){
+  const c=document.getElementById("cartBox");
+  c.style.display=c.style.display==='block'?'none':'block';
+  document.getElementById("totalAmount").innerText = cart.reduce((a,b)=>a+Number(b.price),0);
+}
+
+function addToCartAnimation(name,price,btn){
+  const flyImg = document.createElement('div');
+  flyImg.className='fly-img';
+  flyImg.style.background='gold';
+  flyImg.style.left=(btn.getBoundingClientRect().left + 10)+'px';
+  flyImg.style.top=(btn.getBoundingClientRect().top)+'px';
+  document.body.appendChild(flyImg);
+  const cartBtn = document.getElementById("cartBtn").getBoundingClientRect();
+  setTimeout(()=>{
+    flyImg.style.left = (cartBtn.left + 10)+'px';
+    flyImg.style.top = (cartBtn.top + 10)+'px';
+    flyImg.style.width='20px';
+    flyImg.style.height='20px';
+    flyImg.style.opacity=0;
+  },50);
+  setTimeout(()=>document.body.removeChild(flyImg),500);
+  addToCart(name,price);
+}
+
+function addToCart(name,price){
+  cart.push({name,price});
+  renderCart();
+}
+
+function removeFromCart(index){
+  cart.splice(index,1);
+  renderCart();
+}
+
+function renderCart(){
+  let html="";
+  let total=0;
+  cart.forEach((i,idx)=>{
+    total+=Number(i.price);
+    html+=`<div class="cart-item">${i.name} - ₦${i.price} <button class="removeBtn" onclick="removeFromCart(${idx})">X</button></div>`;
+  });
+  html+=`<hr>Total: ₦${total}`;
+  document.getElementById("cartItems").innerHTML = html;
+  document.getElementById("totalAmount").innerText = total;
+}
+
+// CHECKOUT
+function checkout(){
+  let buyerName = document.getElementById("buyerName").value;
+  let buyerWhatsApp = document.getElementById("buyerWhatsApp").value;
+  let buyerAddress = document.getElementById("buyerAddress").value;
+  let transactionID = document.getElementById("transactionID").value;
+
+  if(!buyerName||!buyerWhatsApp||!buyerAddress||!transactionID){
+    alert("Please fill all checkout details!");
+    return;
+  }
+
+  let total=cart.reduce((a,b)=>a+Number(b.price),0);
+
+  let msg=`New Order:%0A`;
+  cart.forEach(i=> msg += `${i.name} - ₦${i.price}%0A`);
+  msg += `%0ATotal: ₦${total}%0A`;
+  msg += `%0APayment Account:%0A7030455256 Salaam Muhammad Boluwatife Opay%0AAmount to pay: ₦${total}%0A`;
+  msg += `%0ABuyer Name: ${buyerName}%0AWhatsApp: ${buyerWhatsApp}%0AAddress: ${buyerAddress}%0ATransaction ID: ${transactionID}%0A`;
+
+  window.open(`https://wa.me/2347030455256?text=${msg}`);
+}
+
+// Load home page by default
+enterBuyer();
+</script>
+</body>
+</html>
